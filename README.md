@@ -12,8 +12,21 @@
 
 ## クイックスタート
 
+**データ（`data/us.csv`・`data/jp.csv`）は commit 済みなので、APIキーは要らない。** クローンしたら次の3行で実データの予測まで出せる。
+
 ```bash
 pip install -r requirements.txt
+python run.py train                                   # 28式を実データで推定 → models/*.pkl
+python run.py simulate --scenario scenarios/2026-06_real.json --run-name 2026-06_real
+```
+
+`models/*.pkl` と `outputs/` は git 管理外なので、**クローン直後は `train` が必須**。省くと `simulate` は「学習済みモデルがありません」と言って止まる。
+
+グラフの日本語には和文フォントが要る。Windows・macOS は標準で入っているものを自動で拾う。フォントの無い Linux では警告を出したうえで豆腐（□□□）になるので、`fonts-ipafont-gothic` などを入れる（`apt install fonts-ipafont-gothic`）。
+
+### パイプラインの動作確認だけしたいとき
+
+```bash
 python run.py demo      # 合成データの生成 → 28式の推定 → 2026-02 シナリオ → outputs/ に CSV と PNG
 ```
 
@@ -21,14 +34,14 @@ python run.py demo      # 合成データの生成 → 28式の推定 → 2026-0
 
 > `demo` は `models/*.pkl` を合成データで学習した係数に上書きする。デモのあとに実データで予測するときは、先に `python run.py train` をやり直すこと。
 
-## 実データで回す
+## データを最新に更新する
 
-e-Stat の appId（[無料登録](https://www.e-stat.go.jp/api/)で発行）を環境変数に設定してから実行する。
+同梱のデータより新しい月が要るときだけ実行する。e-Stat の appId（[無料登録](https://www.e-stat.go.jp/api/)で発行）を環境変数に設定してから実行する。
 
 ```powershell
 $env:ESTAT_APP_ID = "<あなたのappId>"
-python run.py fetch                                   # data/us.csv と data/jp.csv を取得
-python run.py train                                   # 28式すべてを実データで推定
+python run.py fetch                                   # data/us.csv と data/jp.csv を取得し直す
+python run.py train                                   # 取得し直したデータで推定
 python run.py simulate --scenario scenarios/2026-06_real.json --run-name 2026-06_real
 ```
 

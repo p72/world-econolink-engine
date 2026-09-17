@@ -59,7 +59,17 @@ def cmd_train(args):
 
 def cmd_simulate(args):
     sc = Scenario(**json.loads(Path(args.scenario).read_text(encoding="utf-8")))
-    engine = Engine(load_models(MODELS), _data(args))
+    models = load_models(MODELS)
+    if not models:
+        # 1本も学習していないと、全変数が基準月の値のまま固まった表と PNG が
+        # 出てしまう。見た目は正常なので、ここで止めて train を促す。
+        # (一部だけ未学習のときは Engine が警告を出すにとどめる)
+        raise SystemExit(
+            f"学習済みモデルがありません ({MODELS} が空です)。\n"
+            "先に `python run.py train` を実行してください"
+            "（データは commit 済みなので ESTAT_APP_ID は不要です）。"
+        )
+    engine = Engine(models, _data(args))
     result = engine.run(sc)
     csv_path, png_paths = Exporter(OUTPUTS).export(result, args.run_name)
     cols = ["period", "jp_gdp", "jp_gdp_gap", "jp_inflation", "jp_short_rate", "jp_long_rate",

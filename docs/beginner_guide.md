@@ -96,24 +96,16 @@ pip install -r requirements.txt
 
 `numpy`（数値計算）、`pandas`（表データ）、`statsmodels`（回帰分析）、`matplotlib`（グラフ）、`openpyxl`・`xlrd`（Excel読み込み）が入ります。
 
-### 3-2. デモ（ネット接続もキーも不要）
+### 3-2. 本物のデータで予測する（ネット接続もキーも不要）
+
+日米のデータ（`data/us.csv`・`data/jp.csv`）は**リポジトリに入っています**。クローンしたら、この2行で本物の予測まで出せます。
 
 ```bash
-python run.py demo
+python run.py train      # ① 28本の式を推定（1分ほど）
+python run.py simulate --scenario scenarios/2026-06_real.json --run-name 2026-06_real   # ② 予測
 ```
 
-**合成データ**（それっぽく作った架空のデータ）で、推定から予測・グラフ出力までを一気に試します。合成データは動作確認用なので、**結果に経済的な意味はありません**。
-
-### 3-3. 本物のデータで予測する
-
-日本の統計を取るには、e-Stat（政府統計の総合窓口）の **appId** が必要です（[無料登録](https://www.e-stat.go.jp/api/)で発行できます）。
-
-```powershell
-$env:ESTAT_APP_ID = "<あなたのappId>"
-python run.py fetch      # ① データを取得（数分かかります）
-python run.py train      # ② 28本の式を推定
-python run.py simulate --scenario scenarios/2026-06_real.json --run-name 2026-06_real   # ③ 予測
-```
+推定した式（`models/`）と結果（`outputs/`）は git に入れていないので、**クローンした直後は ① が必須**です。飛ばして ② だけ実行すると「学習済みモデルがありません」と言って止まります。
 
 結果は `outputs/` フォルダにできます。
 
@@ -122,7 +114,27 @@ python run.py simulate --scenario scenarios/2026-06_real.json --run-name 2026-06
 | `outputs/2026-06_real.csv` | 全34系列の月次の数値（実績12か月＋予測） |
 | `outputs/2026-06_real_charts/dashboard_01.png` 〜 | グラフ（1枚に8個） |
 
+グラフの日本語には和文フォントが要ります。Windows・macOS は標準で入っているものを自動で拾います。フォントの無い Linux では警告が出て豆腐（□□□）になるので、`sudo apt install fonts-ipafont-gothic` などで入れてください。
+
+### 3-3. パイプラインの動作確認だけしたいとき
+
+```bash
+python run.py demo
+```
+
+**合成データ**（それっぽく作った架空のデータ）で、推定から予測・グラフ出力までを一気に試します。合成データは動作確認用なので、**結果に経済的な意味はありません**。
+
 > ⚠️ `demo` を実行すると、学習済みの式（`models/`）が合成データのものに上書きされます。そのあと本物のデータで予測するときは、もう一度 `python run.py train` を実行してください。
+
+### 3-4. データを最新に更新したいとき
+
+同梱のデータより新しい月が要るときだけ必要です。日本の統計を取るには、e-Stat（政府統計の総合窓口）の **appId** が必要です（[無料登録](https://www.e-stat.go.jp/api/)で発行できます）。
+
+```powershell
+$env:ESTAT_APP_ID = "<あなたのappId>"
+python run.py fetch      # データを取得し直す（数分かかります）
+python run.py train      # 取得し直したデータで推定
+```
 
 ---
 
@@ -414,12 +426,13 @@ return float(eq.to_level(beta[0] + beta[1:] @ z, g))                        # �
 
 | 症状 | 原因と対処 |
 |---|---|
-| `環境変数 ESTAT_APP_ID に e-Stat の appId を設定してください` | appId が未設定です。[3-3](#3-3-本物のデータで予測する)の `$env:ESTAT_APP_ID = ...` を先に実行してください |
+| `学習済みモデルがありません (... が空です)` | クローンした直後で `models/` が空です。先に `python run.py train` を実行してください（データは同梱なので appId は不要） |
+| `環境変数 ESTAT_APP_ID に e-Stat の appId を設定してください` | appId が未設定です。`fetch`（データの更新）にだけ必要です。[3-4](#3-4-データを最新に更新したいとき)の `$env:ESTAT_APP_ID = ...` を先に実行してください |
 | `base_date ... の実績データがありません` | シナリオの `base_date` が新しすぎます。統計によって公表時期が違うので、すべての系列がそろっている月（例：`2026-06-01`）にしてください |
 | 予測の数字が明らかにおかしい | 直前に `demo` を実行していませんか？ `models/` が合成データのものになっています。`python run.py train` をやり直してください |
 | `モデル未学習のため前期値を保持する変数: [...]` という警告 | その式を推定できていません（データが足りないなど）。`train` の表で `status` が `skip` になっていないか確認してください |
 | `CircularReferenceError` | `equations.py` を書き換えて、まだ計算していない変数の「今月の値」を使っています。その説明変数をラグ付き（`t-1`）にするか、`STEPS` の順番を見直してください |
-| グラフの日本語が「□」になる | 日本語フォントが見つかっていません。Yu Gothic やメイリオなどのフォントがあるか確認してください |
+| グラフの日本語が「□」になる | 日本語フォントが見つかっていません。`日本語フォントが見つかりません` という警告も出ているはずです。Windows・macOS は標準フォントを自動で拾います。Linux では `sudo apt install fonts-ipafont-gothic` などで入れてください |
 
 ---
 
