@@ -22,6 +22,7 @@ from matplotlib.gridspec import GridSpec
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from econolink.exporter import _set_japanese_font  # noqa: E402
+from econolink.variables import ALL_VARS, col  # noqa: E402
 
 # 配色は dataviz スキルの検証済みパレット。2系列は categorical スロット1・2、
 # 差分パネルの符号は diverging の blue↔red を使う（validate_palette.js で全項目 PASS）。
@@ -29,20 +30,28 @@ C_A, C_B = "#2a78d6", "#eb6834"      # シナリオ A / B
 C_POS, C_NEG = "#2a78d6", "#e34948"  # 差分の +/−
 INK, INK_SUB, GRID = "#0b0b0b", "#52514e", "#d8d6d1"
 
-# 重ね描きするパネル (列名, 見出し)
+# 既定で重ね描きするパネル（列名。--panels で差し替えられる）
 LINE_PANELS = [
-    ("jp_short_rate", "政策金利(%)  ← シナリオで外から与える"),
-    ("jp_long_rate", "長期金利(%)"),
-    ("jp_inflation", "CPI 前年比(%)"),
-    ("jp_gdp_gap", "GDPギャップ(%)"),
-    ("jp_usd_jpy", "USD/JPY（上昇＝円安）"),
-    ("jp_consumption", "実質消費支出(兆円)"),
+    "jp_short_rate", "jp_gdp",
+    "jp_inflation", "jp_unemployment",
+    "jp_gdp_gap", "jp_consumption",
+    "jp_long_rate", "jp_usd_jpy",
 ]
-# 差分を棒で見せるパネル (列名, 見出し)
-DIFF_PANELS = [
-    ("jp_inflation", "CPI 前年比の差 (pt)"),
-    ("jp_gdp_gap", "GDPギャップの差 (pt)"),
-]
+# 既定で差分を棒にするパネル（列名。--diff-panels で差し替えられる）
+DIFF_PANELS = ["jp_gdp", "jp_unemployment", "jp_inflation", "jp_gdp_gap"]
+
+# シナリオで外から与える変数。見出しに内生でないことを書き添える。
+EXOGENOUS = {"jp_short_rate", "world_oil_price"}
+COUNTRY = {"jp_": "日本：", "us_": "米国：", "world_": ""}
+
+
+def heading_of(colname: str) -> str:
+    """列名から見出しを作る。ラベルは variables.ALL_VARS の定義をそのまま使う。
+    日米で同じラベル（実質GDP 前年比 など）があるので、国名を前に付けて区別する。"""
+    label = {col(v): lab for v, lab in ALL_VARS.items()}.get(colname, colname)
+    prefix = next((p for k, p in COUNTRY.items() if colname.startswith(k)), "")
+    suffix = "　← シナリオで外から与える" if colname in EXOGENOUS else ""
+    return f"{prefix}{label}{suffix}"
 
 
 def _style_axis(ax) -> None:
@@ -73,7 +82,8 @@ def _end_labels(ax, x, ya, yb, ca, cb) -> None:
 
 
 def build(a: pd.DataFrame, b: pd.DataFrame, label_a: str, label_b: str,
-          note: str, title: str, out: Path) -> Path:
+          note: str, title: str, out: Path,
+          panels: list[str], diff_panels: list[str]) -> Path:
     _set_japanese_font()
     plt.rcParams["figure.facecolor"] = "#ffffff"
     plt.rcParams["axes.facecolor"] = "#ffffff"
@@ -82,14 +92,21 @@ def build(a: pd.DataFrame, b: pd.DataFrame, label_a: str, label_b: str,
     fc = a["period"] >= 0          # 基準月＋予測期
     hist = a["period"] <= 0        # 実績期
 
-    nrow = 4
-    # 最終行は注記。行数が多いので、パネル1行分より高めに取る。
-    fig = plt.figure(figsize=(13.2, 3.05 * nrow + 3.9))
-    gs = GridSpec(nrow + 1, 2, figure=fig,
-                  height_ratios=[1] * nrow + [1.35], hspace=0.62, wspace=0.18)
+    line_rows = -(-len(panels) // 2)
+    diff_rows = -(-len(diff_panels) // 2)
+    nrow = line_rows + diff_rows
+    # 注記は GridSpec の行に入れると行間（hspace）に押されて下が切れるので、
+    # グリッドの外に出して、図の下余白をそのぶん確保してそこに置く。
+    # 1行 = 9.2pt × linespacing 1.75 ≒ 0.23 インチ。最下段パネルの
+    # 目盛りラベル（45度）がこの帯に垂れ下がるので、余白は 1.05 と多めに取る。
+    note_h = 0.23 * (note.count("\n") + 1) + 1.05 if note else 0.0
+    # 上余白 1.0 インチ = 図タイトル + 1段目のパネル見出しのぶん
+    fig_h = 3.05 * nrow + 1.35 + note_h
+    fig = plt.figure(figsize=(13.2, fig_h))
+    gs = GridSpec(nrow, 2, figure=fig, hspace=0.62, wspace=0.18)
 
     # --- 水準の重ね描き ----------------------------------------------------
-    for i, (colname, heading) in enumerate(LINE_PANELS):
+    for i, colname in enumerate(panels):
         ax = fig.add_subplot(gs[i // 2, i % 2])
         # 実績部分は共通なのでグレーで1本だけ引く
         ax.plot(a.index[hist], a.loc[hist, colname], color="#9b9a95", lw=2.0, label="実績", zorder=2)
@@ -97,19 +114,20 @@ def build(a: pd.DataFrame, b: pd.DataFrame, label_a: str, label_b: str,
         ax.plot(b.index[fc], b.loc[fc, colname], color=C_B, lw=2.0, ls="--", label=label_b, zorder=3)
         _end_labels(ax, a.index[-1], a[colname].iloc[-1], b[colname].iloc[-1], C_A, C_B)
         ax.axvline(base, color=INK_SUB, ls=":", lw=1.1, zorder=1)
-        ax.set_title(heading, fontsize=10.5, color=INK, pad=8, loc="left")
+        ax.set_title(heading_of(colname), fontsize=10.5, color=INK, pad=8, loc="left")
         _style_axis(ax)
         if i == 0:
             ax.legend(loc="upper left", fontsize=8.5, frameon=False, labelcolor=INK_SUB)
 
     # --- 差分（A − B） -----------------------------------------------------
-    for i, (colname, heading) in enumerate(DIFF_PANELS):
-        ax = fig.add_subplot(gs[3, i])
+    for i, colname in enumerate(diff_panels):
+        ax = fig.add_subplot(gs[line_rows + i // 2, i % 2])
         d = (a[colname] - b[colname])[fc]
         ax.bar(d.index, d.values, width=20,
                color=[C_POS if v >= 0 else C_NEG for v in d.values], zorder=3)
         ax.axhline(0, color=INK_SUB, lw=1.0, zorder=2)
-        ax.set_title(f"{label_a}の効果：{heading}", fontsize=10.5, color=INK, pad=8, loc="left")
+        ax.set_title(f"{label_a}の効果：{heading_of(colname)}の差", fontsize=10.5,
+                     color=INK, pad=8, loc="left")
         _style_axis(ax)
         last = d.iloc[-1]
         ax.annotate(f"{last:+.2f}", xy=(d.index[-1], last),
@@ -117,14 +135,13 @@ def build(a: pd.DataFrame, b: pd.DataFrame, label_a: str, label_b: str,
                     ha="center", fontsize=9,
                     color=C_POS if last >= 0 else C_NEG)
 
-    # --- 注記 --------------------------------------------------------------
-    ax = fig.add_subplot(gs[4, :])
-    ax.axis("off")
-    ax.text(0, 1, note, va="top", ha="left", fontsize=9.2, color=INK_SUB,
-            linespacing=1.75, transform=ax.transAxes)
+    # --- 注記（図の下余白に直接置く） --------------------------------------
+    if note:
+        fig.text(0.055, (note_h - 0.30) / fig_h, note, va="top", ha="left",
+                 fontsize=9.2, color=INK_SUB, linespacing=1.75)
 
-    fig.suptitle(title, fontsize=15, color=INK, x=0.055, ha="left", y=0.988)
-    fig.subplots_adjust(top=0.945, bottom=0.035, left=0.055, right=0.975)
+    fig.suptitle(title, fontsize=15, color=INK, x=0.055, ha="left", y=1 - 0.38 / fig_h)
+    fig.subplots_adjust(top=1 - 1.0 / fig_h, bottom=note_h / fig_h, left=0.055, right=0.975)
     out.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out, dpi=150)
     plt.close(fig)
@@ -140,15 +157,28 @@ def main() -> None:
     p.add_argument("--title", default="日銀の利上げシナリオ比較")
     p.add_argument("--note-file", default=None, help="注記を書いたテキストファイル")
     p.add_argument("--outputs", default="outputs")
+    p.add_argument("--panels", nargs="+", default=LINE_PANELS,
+                   help=f"重ね描きする列名（既定: {' '.join(LINE_PANELS)}）")
+    p.add_argument("--diff-panels", nargs="+", default=DIFF_PANELS,
+                   help=f"差分を棒にする列名（既定: {' '.join(DIFF_PANELS)}）")
+    p.add_argument("--list-vars", action="store_true", help="使える列名を一覧して終了")
     args = p.parse_args()
+
+    if args.list_vars:
+        for v, lab in ALL_VARS.items():
+            print(f"{col(v):32s} {lab}")
+        return
 
     od = Path(args.outputs)
     a = pd.read_csv(od / f"{args.run_a}.csv", index_col=0, parse_dates=True)
     b = pd.read_csv(od / f"{args.run_b}.csv", index_col=0, parse_dates=True)
+    missing = [c for c in args.panels + args.diff_panels if c not in a.columns]
+    if missing:
+        p.error(f"CSV に無い列です: {', '.join(missing)}（--list-vars で一覧）")
     la, lb = args.labels or (args.run_a, args.run_b)
     note = Path(args.note_file).read_text(encoding="utf-8").rstrip() if args.note_file else ""
     out = Path(args.out) if args.out else od / f"compare_{args.run_a}_vs_{args.run_b}.png"
-    print("->", build(a, b, la, lb, note, args.title, out))
+    print("->", build(a, b, la, lb, note, args.title, out, args.panels, args.diff_panels))
 
 
 if __name__ == "__main__":
