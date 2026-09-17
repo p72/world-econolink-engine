@@ -1,0 +1,12 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# 再生成できる生成物 (python run.py train / simulate で作り直す)
+models/*.pkl
+outputs/
+
+# 秘密情報
+.env
