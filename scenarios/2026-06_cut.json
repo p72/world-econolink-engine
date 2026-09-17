@@ -1,0 +1,9 @@
+{
+  "base_date": "2026-06-01",
+  "periods": 12,
+  "jp_short_rate": [1.00, 1.00, 0.75, 0.75, 0.75, 0.75, 0.50, 0.50, 0.50, 0.50, 0.50, 0.50],
+  "jp_long_rate": [null],
+  "oil_price": [84],
+  "cpi_mode": "model",
+  "add_factor_decay": 0.9
+}
