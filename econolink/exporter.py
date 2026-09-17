@@ -1,6 +1,7 @@
 """出力 (論文 第9章): 月次時系列 CSV と、8パネル/枚のダッシュボード PNG。"""
 from __future__ import annotations
 
+import warnings
 from pathlib import Path
 
 import matplotlib
@@ -14,12 +15,26 @@ from .variables import ALL_VARS, col
 BAR_VARS = {"jp.gdp_gap", "us.gdp_gap"}  # 符号に意味のある系列は棒グラフ
 
 
+# 日本語が出せるフォントの候補。Windows → macOS → Linux の順に見て、最初に見つかったものを使う。
+# 見つからないと軸ラベルや凡例が豆腐 (□□□) になるので、候補は広めに持つ。
+JP_FONT_CANDIDATES = [
+    "Yu Gothic", "Meiryo", "MS Gothic", "MS PGothic",            # Windows
+    "Hiragino Sans", "Hiragino Kaku Gothic ProN",                # macOS
+    "Noto Sans CJK JP", "Noto Sans JP", "Source Han Sans JP",    # Linux (Noto 系)
+    "IPAexGothic", "IPAGothic", "IPAPGothic", "TakaoGothic",     # Linux (IPA 系)
+    "VL Gothic", "WenQuanYi Zen Hei",
+]
+
+
 def _set_japanese_font() -> None:
     names = {f.name for f in font_manager.fontManager.ttflist}
-    for cand in ["Yu Gothic", "Meiryo", "MS Gothic", "Noto Sans CJK JP", "IPAexGothic", "Hiragino Sans"]:
+    for cand in JP_FONT_CANDIDATES:
         if cand in names:
             plt.rcParams["font.family"] = cand
+            plt.rcParams["axes.unicode_minus"] = False  # 和文フォントには U+2212 が無いことが多い
             return
+    warnings.warn("日本語フォントが見つかりません。グラフの日本語が豆腐になります。"
+                  "fonts-ipafont-gothic や Noto Sans CJK JP を入れてください。")
 
 
 class Exporter:
